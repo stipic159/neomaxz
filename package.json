@@ -1,0 +1,38 @@
+{
+  "name": "neomaxz",
+  "version": "0.1.0",
+  "description": "Headless WebSocket/TCP client library for MAX messenger inspired by Baileys",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "test": "node --import tsx --test tests/**/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "max",
+    "max-messenger",
+    "baileys",
+    "socket",
+    "client",
+    "bot",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@msgpack/msgpack": "^3.0.0-beta.2",
+    "fzstd": "^0.1.1",
+    "lz4js": "^0.2.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.5.14",
+    "tsup": "^8.4.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.0"
+  }
+}
