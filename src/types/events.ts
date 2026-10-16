@@ -1,12 +1,7 @@
 import type { InboundFrame, OutboundFrame } from "../protocol/frame.js";
 import type { ConnectionState } from "./connection.js";
 import type { MaxMessage } from "./message.js";
-
-export interface PresenceUpdate {
-  chatId: string;
-  userId: string;
-  isTyping: boolean;
-}
+import type { PresenceAction, PresenceUpdate } from "./presence.js";
 
 export interface ReadReceipt {
   chatId: string;
@@ -25,7 +20,7 @@ export interface AttachmentReadyEvent {
 }
 
 export interface MaxEvents {
-  'connection.update': Partial<ConnectionState> & { qr?: string };
+  'connection.update': Partial<ConnectionState> & { qr?: string; trackId?: string };
   'creds.update': Record<string, any>;
   'frame.inbound': InboundFrame;
   'frame.outbound': OutboundFrame;

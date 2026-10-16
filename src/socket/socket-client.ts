@@ -255,10 +255,21 @@ export class SocketClient {
       }
 
       case OPCODES.PUSH_TYPING: {
+        const rawAction = String(payload.action ?? (payload.typing === false ? 'PAUSED' : 'TYPING')).toLowerCase();
+        let action: any = 'typing';
+        if (rawAction.includes('record') || rawAction.includes('audio') || rawAction.includes('voice')) {
+          action = 'recording_audio';
+        } else if (rawAction.includes('upload') || rawAction.includes('file')) {
+          action = 'uploading_file';
+        } else if (rawAction.includes('pause') || payload.typing === false) {
+          action = 'paused';
+        }
+
         this.ev.emit('presence.update', {
           chatId: String(payload.chatId ?? ''),
           userId: String(payload.userId ?? ''),
-          isTyping: Boolean(payload.typing ?? true),
+          action,
+          isTyping: action !== 'paused',
         });
         break;
       }

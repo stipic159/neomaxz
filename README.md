@@ -141,19 +141,49 @@ main().catch(console.error);
 
 ### Авторизация и сессия
 
+- **`sock.requestQrCode()`**: Запрос QR-кода для быстрой авторизации через мобильное приложение MAX.
+- **`sock.pollQrStatus(trackId?, options?)`**: Ожидание сканирования QR-кода на мобильном устройстве и автоматический вход.
 - **`sock.requestAuthCode(phone)`**: Запрос SMS-кода для указанного номера телефона.
 - **`sock.submitAuthCode(code)`**: Проверка кода из SMS. Возвращает `{ status: 'ok' }` или `{ status: 'password_required', hint }`.
 - **`sock.submitPassword(password)`**: Отправка пароля двухфакторной аутентификации.
 - **`sock.logout()`**: Завершение сессии на сервере MAX и очистка локального токена.
 - **`sock.end()`**: Принудительное закрытие сокета.
 
+### Управление чатами и группами (`sock.chats`)
+
+- **`sock.getChats(options?)`**: Получение списка активных диалогов и каналов пользователя.
+- **`sock.getChat(chatId)`**: Получение детальной информации о чате/канале.
+- **`sock.createChat({ title, userIds, description?, isChannel? })`**: Создание новой группы или канала.
+- **`sock.setChatInfo(chatId, { title?, description?, avatarToken? })`**: Обновление названия, описания или аватара чата.
+- **`sock.getChatMembers(chatId, options?)`**: Список участников группы с их ролями (`ADMIN`, `MEMBER`, `OWNER`).
+- **`sock.addChatMembers(chatId, userIds)`**: Добавление пользователей в группу.
+- **`sock.removeChatMember(chatId, userId)`**: Исключение (кик) пользователя из группы.
+- **`sock.leaveChat(chatId)`**: Выход из чата или канала.
+- **`sock.deleteChat(chatId)`**: Удаление чата.
+- **`sock.createInviteLink(chatId)`**: Создание ссылки-приглашения в группу.
+- **`sock.joinByLink(inviteLinkOrCode)`**: Вступление в группу по ссылке-приглашению.
+
+### Пользователи, контакты и профили (`sock.contacts`)
+
+- **`sock.getContactByPhone(phone)`**: Пробитие профиля пользователя MAX по номеру телефона.
+- **`sock.getUserProfile(userId)`**: Получение публичного профиля пользователя по ID.
+- **`sock.searchContacts(query)`**: Поиск пользователей в своей адресной книге.
+- **`sock.publicSearch(query)`**: Глобальный поиск пользователей и ботов в каталоге MAX по никнейму.
+- **`sock.addContact(phone, { firstName, lastName? })`**: Добавление номера в контакты.
+- **`sock.updateProfile({ firstName?, lastName?, bio?, avatarToken? })`**: Обновление данных своего профиля.
+
+### Индикаторы активности / Presence (`sock.presence`)
+
+- **`sock.sendPresence(chatId, action)`**: Отправка статуса активности (`'typing'`, `'recording_audio'`, `'uploading_file'`, `'paused'`).
+- **`sock.simulateTyping(chatId, delayMs?, action?)`**: Показ статуса активности в течение `delayMs` с автоматическим сбросом.
+
 ### События (`sock.ev.on`)
 
-- `'connection.update'`: Изменение состояния сокета (`connecting`, `open`, `close`).
+- `'connection.update'`: Изменение состояния сокета (`connecting`, `open`, `close`, `{ qr, trackId }`).
 - `'creds.update'`: Обновление токенов или информации об устройстве.
 - `'messages.upsert'`: Новые входящие сообщения (`{ messages: MaxMessage[], type: 'notify' }`).
 - `'messages.read'`: Уведомление о прочтении сообщений (`{ chatId, userId, messageIds, markTime }`).
-- `'presence.update'`: Изменение статуса активности пользователей (набор текста и онлайн).
+- `'presence.update'`: Изменение активности пользователя (`{ chatId, userId, action, isTyping }`).
 
 ---
 

@@ -27,6 +27,18 @@ export * from "./types/message.js";
 export * from "./types/media.js";
 export * from "./types/buttons.js";
 
+// Chats & Groups exports
+export * from "./chats/chat-manager.js";
+export * from "./types/chat.js";
+
+// Contacts & Profiles exports
+export * from "./contacts/contact-manager.js";
+export * from "./types/contact.js";
+
+// Presence & Typing exports
+export * from "./presence/presence-manager.js";
+export * from "./types/presence.js";
+
 // Client Facade
 export * from "./client.js";
 

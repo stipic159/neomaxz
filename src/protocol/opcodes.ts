@@ -29,27 +29,32 @@ export const OPCODES = {
   LOGIN: 0x0013,            // Login with session token { token }
   LOGOUT: 0x0014,           // Terminate session { pushToken }
   CHECK_PASSWORD: 0x0073,   // 2FA cloud password { trackId, password } -> returns loginToken
-  QR_LOGIN_START: 0x0018,   // QR authentication request (if used)
+  QR_LOGIN_START: 0x0018,   // QR authentication request
+  QR_LOGIN_CHECK: 0x0019,   // QR authentication status poll
 
   // --- Contacts & Profile ---
   CONTACT_INFO: 0x0020,
   CONTACT_UPDATE: 0x0022,
   CONTACT_SEARCH: 0x0025,
   CONTACT_ADD: 0x0029,
+  PUBLIC_SEARCH: 0x002c,    // Global directory search
   CONTACT_INFO_BY_PHONE: 0x002e,
-  PUBLIC_SEARCH: 0x003c,    // Global directory search
 
   // --- Chats & Dialogs ---
   CHAT_HISTORY: 0x0031,
+  CHAT_INFO: 0x0033,
   CHAT_DELETE: 0x0034,
   CHATS_LIST: 0x0035,
   CHAT_SET_INFO: 0x0037,    // Update title/description
   CHAT_LEAVE: 0x003a,
   CHAT_MEMBERS: 0x003b,
   CHAT_CREATE: 0x003c,
+  CHAT_INVITE_LINK: 0x003e,
+  CHAT_JOIN_LINK: 0x003f,
 
-  // --- Messages ---
+  // --- Messages & Typing ---
   MSG_SEND: 0x0040,
+  MSG_TYPING: 0x004a,       // Outgoing typing status
   MSG_DELETE: 0x0042,
   MSG_EDIT: 0x0043,
   MSG_REACTION: 0x0044,

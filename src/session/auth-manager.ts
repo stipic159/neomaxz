@@ -167,6 +167,86 @@ export class AuthManager {
   }
 
   /**
+   * Requests a QR-code for web/desktop authorization (0x0018 QR_LOGIN_START).
+   */
+  public async requestQrCode(
+    client: SocketClient
+  ): Promise<{ qr: string; trackId: string }> {
+    const res = await client.query({
+      opcode: OPCODES.QR_LOGIN_START,
+      payload: {
+        deviceId: this.state.creds.deviceId,
+      },
+    });
+
+    const qr = String(res.payload?.qr ?? res.payload?.qrCode ?? res.payload?.url ?? '');
+    const trackId = String(res.payload?.trackId ?? res.payload?.id ?? '');
+
+    if (!qr) {
+      throw new Error(`QR_LOGIN_START did not return a valid QR code: ${JSON.stringify(res.payload)}`);
+    }
+
+    this.runtime.trackId = trackId;
+    client.ev.emit('connection.update', { qr, trackId });
+
+    return { qr, trackId };
+  }
+
+  /**
+   * Polls the server until the user scans the QR-code on their mobile app (0x0019 QR_LOGIN_CHECK).
+   */
+  public async pollQrStatus(
+    client: SocketClient,
+    trackId?: string,
+    options: { timeoutMs?: number; intervalMs?: number } = {}
+  ): Promise<{ sessionToken: string }> {
+    const tid = trackId ?? this.runtime.trackId;
+    if (!tid) {
+      throw new Error("Cannot poll QR status without a valid trackId");
+    }
+
+    const timeoutMs = options.timeoutMs ?? 60000;
+    const intervalMs = options.intervalMs ?? 2000;
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      if (!client.isOpen()) {
+        throw new Error("Connection closed while polling QR status");
+      }
+
+      try {
+        const res = await client.query({
+          opcode: OPCODES.QR_LOGIN_CHECK,
+          payload: {
+            trackId: tid,
+          },
+        });
+
+        const loginToken = findLongToken(res.payload);
+        if (loginToken) {
+          this.state.creds.sessionToken = loginToken;
+          client.ev.emit("creds.update", this.state.creds);
+          return { sessionToken: loginToken };
+        }
+
+        const status = String(res.payload?.status ?? '').toLowerCase();
+        if (status === 'expired' || status === 'canceled' || status === 'rejected') {
+          throw new Error(`QR code authorization ${status}`);
+        }
+      } catch (err: any) {
+        if (err.message?.includes('expired') || err.message?.includes('rejected')) {
+          throw err;
+        }
+        // otherwise wait and retry
+      }
+
+      await new Promise<void>((resolve) => setTimeout(resolve, intervalMs));
+    }
+
+    throw new Error(`QR code authorization timed out after ${timeoutMs}ms`);
+  }
+
+  /**
    * Step 3: Logs in with session token (0x0013 LOGIN).
    * Restores session snapshot (profile, chats, contacts) and handles token rotation.
    */
