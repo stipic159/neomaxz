@@ -114,12 +114,26 @@ main().catch(console.error);
 
 ## 🛠 Методы API (`sock`)
 
-> *Примечание: На данный момент библиотека поддерживает работу с текстовыми сообщениями, реакциями и историей чатов. Поддержка отправки и скачивания медиафайлов находится в разработке.*
+### Работа с сообщениями и медиа
 
-### Работа с сообщениями
-
-- **`sock.sendMessage(chatId, { text, replyToMessageId })`**: Отправка текста или ответа с цитированием.
-- **`sock.editMessage(chatId, messageId, newText)`**: Редактирование текста сообщения.
+- **`sock.sendMessage(chatId, content)`**: Отправка сообщений в стиле Baileys:
+  - **Текст и Markdown**: `{ text: 'Привет, *мир*!' }` (автоматический парсинг Markdown: `*жирный*`, `_курсив_`, `~зачеркнутый~`, `||спойлер||`, ````код````, `[ссылка](url)`).
+  - **Фото**: `{ image: Buffer | 'path/to/pic.jpg' | { url: '...' }, caption: 'Подпись' }`.
+  - **Документы**: `{ document: Buffer, fileName: 'doc.pdf', mimetype: 'application/pdf' }`.
+  - **Видео**: `{ video: Buffer, caption: 'Видео' }`.
+  - **Голосовые заметки (PTT)**: `{ audio: Buffer, ptt: true }`.
+  - **Кружочки (VideoNote)**: `{ videoNote: Buffer }`.
+  - **Инлайн-клавиатуры**: `{ text: 'Выбор:', buttons: [[{ type: 'CALLBACK', text: 'Клик', payload: 'btn_1' }, { type: 'URL', text: 'Сайт', url: 'https://...' }]] }`.
+  - **Опросы**: `{ poll: { question: 'Вопрос?', options: ['Вариант 1', 'Вариант 2'] } }`.
+  - **Отложенные**: `{ text: 'В будущее', sendAt: 1800000000000 }`.
+  - **Ответ с цитированием**: `{ text: 'Ответ', replyToMessageId: '...' }`.
+- **`sock.downloadMedia(message | attach)`**: Скачивание медиафайлов и документов из входящих сообщений в `Buffer` с валидацией цепочки Минцифры РФ.
+- **`sock.markChatRead(chatId, messageIds?, fromTimestamp?)`**: Отметка сообщений в чате как прочитанные.
+- **`sock.pinMessage(chatId, messageId, notify = false)`**: Закрепление сообщения в чате.
+- **`sock.unpinMessage(chatId, messageId)`**: Открепление сообщения.
+- **`sock.sendCallback(chatId, messageId, callbackId, payload?)`**: Отправка ответа на нажатие инлайн-кнопки.
+- **`sock.forwardMessages(targetChatId, sourceChatId, messageIds)`**: Пересылка сообщений в другой чат.
+- **`sock.editMessage(chatId, messageId, newText, options?)`**: Редактирование текста сообщения.
 - **`sock.deleteMessages(chatId, messageIds, forMe = false)`**: Удаление одного или нескольких сообщений.
 - **`sock.addReaction(chatId, messageId, emoji)`**: Установка реакции (эмодзи) на сообщение.
 - **`sock.removeReaction(chatId, messageId)`**: Снятие реакции.
@@ -138,6 +152,7 @@ main().catch(console.error);
 - `'connection.update'`: Изменение состояния сокета (`connecting`, `open`, `close`).
 - `'creds.update'`: Обновление токенов или информации об устройстве.
 - `'messages.upsert'`: Новые входящие сообщения (`{ messages: MaxMessage[], type: 'notify' }`).
+- `'messages.read'`: Уведомление о прочтении сообщений (`{ chatId, userId, messageIds, markTime }`).
 - `'presence.update'`: Изменение статуса активности пользователей (набор текста и онлайн).
 
 ---

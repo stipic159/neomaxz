@@ -263,6 +263,27 @@ export class SocketClient {
         break;
       }
 
+      case OPCODES.PUSH_READ: {
+        if (payload.fileId || payload.photoToken || payload.videoId) {
+          this.ev.emit('attachment.ready', {
+            chatId: payload.chatId ? String(payload.chatId) : undefined,
+            fileId: payload.fileId ? String(payload.fileId) : undefined,
+            photoToken: payload.photoToken ? String(payload.photoToken) : undefined,
+            videoId: payload.videoId ? String(payload.videoId) : undefined,
+            url: payload.url,
+            raw: payload,
+          });
+        }
+
+        this.ev.emit('messages.read', {
+          chatId: String(payload.chatId ?? ''),
+          userId: String(payload.userId ?? ''),
+          messageIds: Array.isArray(payload.messageIds) ? payload.messageIds.map(String) : undefined,
+          markTime: Number(payload.markTime ?? Date.now()),
+        });
+        break;
+      }
+
       default:
         // Other push events
         break;

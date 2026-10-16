@@ -16,9 +16,16 @@ export * from "./session/tokens.js";
 export * from "./session/file-auth.js";
 export * from "./session/auth-manager.js";
 
+// Media exports
+export * from "./media/http-client.js";
+export * from "./media/media-manager.js";
+
 // Messages & Domain exports
 export * from "./messages/message-manager.js";
+export * from "./messages/formatting.js";
 export * from "./types/message.js";
+export * from "./types/media.js";
+export * from "./types/buttons.js";
 
 // Client Facade
 export * from "./client.js";

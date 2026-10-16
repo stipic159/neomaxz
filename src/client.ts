@@ -2,7 +2,8 @@ import { SocketClient, type SocketClientOptions } from "./socket/socket-client.j
 import { AuthManager, DEFAULT_USER_AGENT, type SubmitCodeResult } from "./session/auth-manager.js";
 import { MessageManager } from "./messages/message-manager.js";
 import type { AuthenticationState } from "./session/auth-state.js";
-import type { AnyMessageContent, MaxMessage } from "./types/message.js";
+import type { AnyMessageContent, MaxMessage, MessageElement } from "./types/message.js";
+import type { MessageAttachment } from "./types/media.js";
 import { normalizeMessage } from "./types/message.js";
 import { TransportOptions, type ITransport, WebSocketTransport } from "./socket/transport.js";
 import { OPCODES } from "./protocol/opcodes.js";
@@ -46,7 +47,7 @@ export function makeMaxSocket(config: MaxSocketConfig) {
   });
 
   const sock = {
-    /** Event bus: connection.update, messages.upsert, presence.update, creds.update */
+    /** Event bus: connection.update, messages.upsert, messages.read, presence.update, creds.update */
     ev: socketClient.ev,
 
     /** Current authentication state */
@@ -63,6 +64,12 @@ export function makeMaxSocket(config: MaxSocketConfig) {
 
     /** Underlying socket client */
     rawClient: socketClient,
+
+    /** Message manager instance */
+    messages: messageManager,
+
+    /** Media manager instance */
+    media: messageManager.getMediaManager(),
 
     /**
      * Connects to MAX, executes INIT handshake, and logs in if sessionToken exists.
@@ -101,7 +108,7 @@ export function makeMaxSocket(config: MaxSocketConfig) {
     },
 
     /**
-     * Sends a text message or reply to a chat
+     * Sends a text message, media, buttons, or poll to a chat
      */
     async sendMessage(
       chatId: string | number | bigint,
@@ -121,9 +128,10 @@ export function makeMaxSocket(config: MaxSocketConfig) {
     async editMessage(
       chatId: string | number | bigint,
       messageId: string | number | bigint,
-      newText: string
+      newText: string,
+      options: { parseMode?: 'markdown' | 'none'; elements?: MessageElement[] } = {}
     ): Promise<void> {
-      return messageManager.editMessage(socketClient, chatId, messageId, newText);
+      return messageManager.editMessage(socketClient, chatId, messageId, newText, options);
     },
 
     /**
@@ -156,6 +164,76 @@ export function makeMaxSocket(config: MaxSocketConfig) {
       messageId: string | number | bigint
     ): Promise<void> {
       return messageManager.removeReaction(socketClient, chatId, messageId);
+    },
+
+    /**
+     * Marks messages in a chat as read
+     */
+    async markChatRead(
+      chatId: string | number | bigint,
+      messageIds: Array<string | number | bigint> = [],
+      fromTimestamp?: number
+    ): Promise<void> {
+      return messageManager.markChatRead(socketClient, chatId, messageIds, fromTimestamp);
+    },
+
+    /**
+     * Pins a message in a chat
+     */
+    async pinMessage(
+      chatId: string | number | bigint,
+      messageId: string | number | bigint,
+      notify = false
+    ): Promise<void> {
+      return messageManager.pinMessage(socketClient, chatId, messageId, notify);
+    },
+
+    /**
+     * Unpins a message in a chat
+     */
+    async unpinMessage(
+      chatId: string | number | bigint,
+      messageId: string | number | bigint
+    ): Promise<void> {
+      return messageManager.unpinMessage(socketClient, chatId, messageId);
+    },
+
+    /**
+     * Sends a callback query response when user clicks an inline button
+     */
+    async sendCallback(
+      chatId: string | number | bigint,
+      messageId: string | number | bigint,
+      callbackId: string,
+      payload?: string
+    ): Promise<void> {
+      return messageManager.sendCallback(socketClient, chatId, messageId, callbackId, payload);
+    },
+
+    /**
+     * Forwards messages to another chat
+     */
+    async forwardMessages(
+      targetChatId: string | number | bigint,
+      sourceChatId: string | number | bigint,
+      messageIds: Array<string | number | bigint>
+    ): Promise<MaxMessage[]> {
+      return messageManager.forwardMessages(
+        socketClient,
+        targetChatId,
+        sourceChatId,
+        messageIds,
+        config.auth.creds.userId
+      );
+    },
+
+    /**
+     * Downloads media attachment associated with a message or attachment descriptor
+     */
+    async downloadMedia(
+      target: MaxMessage | MessageAttachment | Record<string, any>
+    ): Promise<Buffer> {
+      return messageManager.downloadMedia(socketClient, target);
     },
 
     /**

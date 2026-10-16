@@ -1,3 +1,32 @@
+import type { InlineButton } from "./buttons.js";
+import type { MediaSource, MessageAttachment } from "./media.js";
+
+export type MessageElementType =
+  | 'BOLD'
+  | 'ITALIC'
+  | 'STRIKETHROUGH'
+  | 'UNDERLINE'
+  | 'CODE'
+  | 'PRE'
+  | 'SPOILER'
+  | 'LINK'
+  | 'MENTION';
+
+export interface MessageElement {
+  type: MessageElementType;
+  offset: number;
+  length: number;
+  url?: string;
+  userId?: string | bigint;
+}
+
+export interface PollInput {
+  question: string;
+  options: string[];
+  multipleAnswers?: boolean;
+  anonymous?: boolean;
+}
+
 export interface MessageKey {
   chatId: string;
   id: string;
@@ -5,9 +34,34 @@ export interface MessageKey {
 }
 
 export interface AnyMessageContent {
+  /** Text content of the message */
   text?: string;
-  replyToMessageId?: string;
-  attaches?: any[];
+  /** Reply quoting another message ID */
+  replyToMessageId?: string | number | bigint;
+  /** Raw elements / entities for text formatting */
+  elements?: MessageElement[];
+  /** Parse formatting from text automatically (default: 'markdown') */
+  parseMode?: 'markdown' | 'none';
+  /** Custom attachments */
+  attaches?: MessageAttachment[];
+  
+  // Media attachments in Baileys style:
+  image?: MediaSource;
+  caption?: string;
+  document?: MediaSource;
+  fileName?: string;
+  mimetype?: string;
+  video?: MediaSource;
+  audio?: MediaSource;
+  ptt?: boolean; // Voice note
+  videoNote?: MediaSource; // Round video
+
+  // Interactive buttons and polls:
+  buttons?: InlineButton[][];
+  poll?: PollInput;
+
+  // Scheduling:
+  sendAt?: number | Date;
 }
 
 export interface MaxMessage {
@@ -18,9 +72,10 @@ export interface MaxMessage {
   senderId?: string;
   senderName?: string;
   text: string;
+  elements?: MessageElement[];
   timestamp: number;
   replyToMessageId?: string;
-  attaches: any[];
+  attaches: MessageAttachment[];
   raw: Record<string, any>;
 }
 
@@ -52,6 +107,10 @@ export function normalizeMessage(raw: Record<string, any>, currentUserId?: strin
     replyToMessageId = String(msgObj.link.messageId);
   }
 
+  const elements: MessageElement[] = Array.isArray(msgObj.elements)
+    ? msgObj.elements
+    : [];
+
   return {
     key: {
       chatId,
@@ -64,6 +123,7 @@ export function normalizeMessage(raw: Record<string, any>, currentUserId?: strin
     senderId,
     senderName: raw.sender?.name ?? raw.sender?.firstName ?? undefined,
     text,
+    elements,
     timestamp,
     replyToMessageId,
     attaches: Array.isArray(msgObj.attaches) ? msgObj.attaches : [],

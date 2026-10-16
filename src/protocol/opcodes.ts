@@ -52,7 +52,12 @@ export const OPCODES = {
   MSG_SEND: 0x0040,
   MSG_DELETE: 0x0042,
   MSG_EDIT: 0x0043,
+  MSG_REACTION: 0x0044,
   MSG_READ: 0x0045,
+  MSG_CANCEL_REACTION: 0x0046,
+  MSG_PIN: 0x0047,
+  MSG_UNPIN: 0x0048,
+  MSG_FORWARD: 0x0049,
   MSG_CALLBACK: 0x0076,     // Bot keyboard button callback { callbackId, chatId, payload }
 
   // --- Media & Files ---
@@ -67,6 +72,7 @@ export const OPCODES = {
   PUSH_TYPING: 0x0081,      // Typing status push
   PUSH_CHAT_UPDATE: 0x0087, // Chat metadata update
   PUSH_READ: 0x0088,        // Message read receipt push
+  NOTIF_ATTACH: 0x0088,     // Attachment processing notification
   PUSH_USER_STATUS: 0x008e, // Online/offline status push
 } as const;
 
