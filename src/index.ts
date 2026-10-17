@@ -14,11 +14,13 @@ export * from "./socket/socket-client.js";
 export * from "./session/auth-state.js";
 export * from "./session/tokens.js";
 export * from "./session/file-auth.js";
+export * from "./session/sqlite-auth.js";
 export * from "./session/auth-manager.js";
 
 // Media exports
 export * from "./media/http-client.js";
 export * from "./media/media-manager.js";
+export * from "./media/audio.js";
 
 // Messages & Domain exports
 export * from "./messages/message-manager.js";

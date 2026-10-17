@@ -41,6 +41,7 @@ export interface AudioAttachment {
   audioId?: string | bigint;
   token?: string;
   duration?: number;
+  waveform?: number[];
   ptt?: boolean;
   url?: string;
 }

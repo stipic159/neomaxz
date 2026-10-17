@@ -18,7 +18,11 @@
   - 10-байтный бинарный заголовок (`ver`, `cmd`, `seq`, `opcode`, `flags`, `len`).
   - Обработка 64-битных ID (MessagePack Extension Type 1).
   - Нативное сжатие LZ4 и Zstandard (`fzstd`).
-- 🔄 **Хранение сессий как в Baileys**: Метод `useMultiFileAuthState(folder)` для сохранения учетных данных в `creds.json` с атомарной записью (защита от повреждения файлов).
+- 🔄 **Хранение сессий как в Baileys**:
+  - `useMultiFileAuthState(folder)` — сохранение учетных данных в папку с JSON-файлами и атомарной записью.
+  - `useSqliteAuthState('session.db')` — ультра-быстрое хранилище в едином файле SQLite на базе нативного движка Node.js `node:sqlite` (без node-gyp и внешних зависимостей).
+- 💻 **Консольная утилита CLI (`npx neomaxz`)**: Авторизация через QR-код прямо в терминале или по SMS в одну команду, а также проверка текущей сессии (`whoami`).
+- 🎙️ **Нативная волна звука (Waveform) и длительность**: Автоматический расчёт длительности и генерация амплитудной визуализации (волнограммы из 64 полос) для голосовых сообщений (PTT), как в официальных клиентах MAX и Telegram.
 - ⚡ **Строгая упорядоченность событий**: Внутренняя FIFO-очередь в `sock.ev` предотвращает состояние гонки (race conditions) при асинхронных обработчиках сообщений.
 - 🔁 **Автоматический Heartbeat & Reconnect**: Отправка фоновых PING каждые 25 секунд и экспоненциальный backoff при потере соединения.
 
@@ -34,7 +38,57 @@ pnpm add neomaxz
 
 ---
 
+## 💻 Консольная утилита (CLI)
+
+`neomaxz` поставляется с удобным CLI для быстрой авторизации и проверки аккаунтов прямо в терминале:
+
+```bash
+# Авторизация по QR-коду (ASCII QR прямо в терминале) или по SMS:
+npx neomaxz login
+
+# Использование кастомного пути к файлу сессии SQLite:
+npx neomaxz login --session ./bot-session.db
+
+# Проверка статуса авторизации и данных аккаунта:
+npx neomaxz whoami
+```
+
+---
+
 ## 🚀 Быстрый старт
+
+### Вариант 1: SQLite сессия в одном файле (Рекомендуется)
+
+```typescript
+import { makeMaxSocket, useSqliteAuthState } from 'neomaxz';
+
+async function main() {
+  // 1. Инициализация сессии в едином SQLite файле session.db (на базе node:sqlite)
+  const { state, saveCreds } = await useSqliteAuthState('session.db');
+
+  // 2. Создание клиента
+  const sock = makeMaxSocket({
+    auth: state,
+    autoReconnect: true,
+  });
+
+  // 3. Автосохранение обновленных токенов
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('connection.update', (update) => {
+    if (update.connection === 'open') {
+      console.log('✅ Подключено к MAX!');
+      console.log(`👤 Пользователь: ${sock.user?.name} (ID: ${sock.user?.id})`);
+    }
+  });
+
+  await sock.connect();
+}
+
+main().catch(console.error);
+```
+
+### Вариант 2: Многофайловое хранилище (JSON-папка)
 
 ```typescript
 import { makeMaxSocket, useMultiFileAuthState } from 'neomaxz';
@@ -121,7 +175,7 @@ main().catch(console.error);
   - **Фото**: `{ image: Buffer | 'path/to/pic.jpg' | { url: '...' }, caption: 'Подпись' }`.
   - **Документы**: `{ document: Buffer, fileName: 'doc.pdf', mimetype: 'application/pdf' }`.
   - **Видео**: `{ video: Buffer, caption: 'Видео' }`.
-  - **Голосовые заметки (PTT)**: `{ audio: Buffer, ptt: true }`.
+  - **Голосовые заметки (PTT)**: `{ audio: Buffer, ptt: true }` (автоматическое извлечение длительности и расчёт волнограммы из 64 полос).
   - **Кружочки (VideoNote)**: `{ videoNote: Buffer }`.
   - **Инлайн-клавиатуры**: `{ text: 'Выбор:', buttons: [[{ type: 'CALLBACK', text: 'Клик', payload: 'btn_1' }, { type: 'URL', text: 'Сайт', url: 'https://...' }]] }`.
   - **Опросы**: `{ poll: { question: 'Вопрос?', options: ['Вариант 1', 'Вариант 2'] } }`.
@@ -184,6 +238,11 @@ main().catch(console.error);
 - `'messages.upsert'`: Новые входящие сообщения (`{ messages: MaxMessage[], type: 'notify' }`).
 - `'messages.read'`: Уведомление о прочтении сообщений (`{ chatId, userId, messageIds, markTime }`).
 - `'presence.update'`: Изменение активности пользователя (`{ chatId, userId, action, isTyping }`).
+
+### Утилиты для работы со звуком
+
+- **`extractAudioMetadata(buffer)`**: Извлечение реальной длительности (duration в секундах) и mime-типа из заголовков WAV (RIFF), OGG (Opus) и MP3.
+- **`generateWaveform(buffer, samplesCount = 64)`**: Расчёт массива амплитуд (0..255) для реалистичной визуальной дорожки голосовых сообщений.
 
 ---
 

@@ -11,6 +11,7 @@ import type {
   MessageAttachment,
 } from "../types/media.js";
 import { toBigIntId, type MaxMessage } from "../types/message.js";
+import { extractAudioMetadata, generateWaveform } from "./audio.js";
 
 export class MediaManager {
   private httpClient: HttpClient;
@@ -156,6 +157,8 @@ export class MediaManager {
     ptt = false
   ): Promise<AudioAttachment> {
     const resolved = await this.httpClient.resolveMediaSource(source);
+    const audioMeta = extractAudioMetadata(resolved.buffer);
+    const waveform = ptt ? generateWaveform(resolved.buffer, 64) : undefined;
 
     const res = await client.query({
       opcode: OPCODES.FILE_UPLOAD,
@@ -174,13 +177,15 @@ export class MediaManager {
     const audioId = res.payload?.fileId ?? res.payload?.id;
 
     const uploadRes = await this.httpClient.upload(uploadUrl, resolved.buffer, {
-      headers: { 'Content-Type': ptt ? 'audio/ogg' : 'audio/mpeg' },
+      headers: { 'Content-Type': ptt ? (audioMeta.mimeType ?? 'audio/ogg') : 'audio/mpeg' },
     });
 
     return {
       type: 'AUDIO',
       audioId: audioId ? toBigIntId(audioId) : (uploadRes?.audioId ? toBigIntId(uploadRes.audioId) : undefined),
       token: uploadRes?.token ? String(uploadRes.token) : undefined,
+      duration: audioMeta.duration,
+      waveform,
       ptt,
       url: uploadRes?.url ?? uploadUrl,
     };
