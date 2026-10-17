@@ -32,8 +32,9 @@ describe('CircuitBreaker', () => {
 
     cb.recordFailure(new Error('Second fail'));
     assert.equal(cb.getState(), CircuitState.OPEN);
-    assert.ok(trippedError);
-    assert.match(trippedError!.message, /Second fail/);
+    const err = trippedError as Error | undefined;
+    assert.ok(err);
+    assert.match(err.message, /Second fail/);
   });
 
   test('excessive latency trips circuit', () => {

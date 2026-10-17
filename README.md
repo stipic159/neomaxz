@@ -171,108 +171,47 @@ main().catch(console.error);
 
 ---
 
-## 🛠 Методы API (`sock`)
+## 📖 Документация (API Reference)
 
-### Работа с сообщениями и медиа
+Полная документация по всем методам, опкодам, типам данных и примерам использования вынесена в директорию [`docs/`](docs/README.md):
 
-- **`sock.sendMessage(chatId, content)`**: Отправка сообщений в стиле Baileys:
-  - **Текст и Markdown**: `{ text: 'Привет, *мир*!' }` (автоматический парсинг Markdown: `*жирный*`, `_курсив_`, `~зачеркнутый~`, `||спойлер||`, ````код````, `[ссылка](url)`).
-  - **Фото**: `{ image: Buffer | 'path/to/pic.jpg' | { url: '...' }, caption: 'Подпись' }`.
-  - **Документы**: `{ document: Buffer, fileName: 'doc.pdf', mimetype: 'application/pdf' }`.
-  - **Видео**: `{ video: Buffer, caption: 'Видео' }`.
-  - **Голосовые заметки (PTT)**: `{ audio: Buffer, ptt: true }` (автоматическое извлечение длительности и расчёт волнограммы из 64 полос).
-  - **Кружочки (VideoNote)**: `{ videoNote: Buffer }`.
-  - **Инлайн-клавиатуры**: `{ text: 'Выбор:', buttons: [[{ type: 'CALLBACK', text: 'Клик', payload: 'btn_1' }, { type: 'URL', text: 'Сайт', url: 'https://...' }]] }`.
-  - **Опросы**: `{ poll: { question: 'Вопрос?', options: ['Вариант 1', 'Вариант 2'] } }`.
-  - **Отложенные**: `{ text: 'В будущее', sendAt: 1800000000000 }`.
-  - **Ответ с цитированием**: `{ text: 'Ответ', replyToMessageId: '...' }`.
-- **`sock.downloadMedia(message | attach)`**: Скачивание медиафайлов и документов из входящих сообщений в `Buffer` с валидацией цепочки Минцифры РФ.
-- **`sock.markChatRead(chatId, messageIds?, fromTimestamp?)`**: Отметка сообщений в чате как прочитанные.
-- **`sock.pinMessage(chatId, messageId, notify = false)`**: Закрепление сообщения в чате.
-- **`sock.unpinMessage(chatId, messageId)`**: Открепление сообщения.
-- **`sock.sendCallback(chatId, messageId, callbackId, payload?)`**: Отправка ответа на нажатие инлайн-кнопки.
-- **`sock.forwardMessages(targetChatId, sourceChatId, messageIds)`**: Пересылка сообщений в другой чат.
-- **`sock.editMessage(chatId, messageId, newText, options?)`**: Редактирование текста сообщения.
-- **`sock.deleteMessages(chatId, messageIds, forMe = false)`**: Удаление одного или нескольких сообщений.
-- **`sock.addReaction(chatId, messageId, emoji)`**: Установка реакции (эмодзи) на сообщение.
-- **`sock.removeReaction(chatId, messageId)`**: Снятие реакции.
-- **`sock.getChatHistory(chatId, fromTimestamp?, limit = 50)`**: Получение истории переписки.
+| Раздел документации | Содержание | Ссылка |
+| :--- | :--- | :--- |
+| **🚀 Быстрый старт** | Установка, консольная утилита CLI, минимальный эхо-бот | [docs/quickstart.md](docs/quickstart.md) |
+| **🔐 Авторизация и сессии** | `useSqliteAuthState`, `useMultiFileAuthState`, вход по QR-коду, SMS, 2FA пароль | [docs/authentication.md](docs/authentication.md) |
+| **💬 Сообщения и чаты** | Отправка сообщений, Markdown-разметка, инлайн-кнопки, опросы, реакции, цитирование | [docs/messages.md](docs/messages.md) |
+| **👥 Управление чатами** | Создание групп/каналов, список участников, аватары, ссылки-приглашения | [docs/chats.md](docs/chats.md) |
+| **📇 Контакты и профили** | Поиск пользователей, пробитие профиля по номеру, глобальный поиск, редактирование профиля | [docs/contacts.md](docs/contacts.md) |
+| **👀 Presence и активность** | Индикаторы набора текста, записи аудио, загрузки файлов | [docs/presence.md](docs/presence.md) |
+| **🎬 Медиа и стриминг** | Загрузка и скачивание фото/видео/аудио, волнограммы PTT (64 полосы), потоковый пайплайн | [docs/media.md](docs/media.md) |
+| **⚡ Шина событий (`ev`)** | Каталог всех событий сокета (`messages.upsert`, `connection.update`, FIFO-очередь) | [docs/events.md](docs/events.md) |
+| **🛡 Инфраструктура** | Token Bucket rate limiter, Circuit Breaker, Idempotency Ledger, Gap Recovery | [docs/infrastructure.md](docs/infrastructure.md) |
+| **🔌 Протокол и фреймы** | 10-байтный бинарный заголовок, MessagePack, сжатие LZ4/Zstandard, сертификаты Минцифры | [docs/protocol.md](docs/protocol.md) |
 
-### Авторизация и сессия
+### Структура объекта `sock`
 
-- **`sock.requestQrCode()`**: Запрос QR-кода для быстрой авторизации через мобильное приложение MAX.
-- **`sock.pollQrStatus(trackId?, options?)`**: Ожидание сканирования QR-кода на мобильном устройстве и автоматический вход.
-- **`sock.requestAuthCode(phone)`**: Запрос SMS-кода для указанного номера телефона.
-- **`sock.submitAuthCode(code)`**: Проверка кода из SMS. Возвращает `{ status: 'ok' }` или `{ status: 'password_required', hint }`.
-- **`sock.submitPassword(password)`**: Отправка пароля двухфакторной аутентификации.
-- **`sock.logout()`**: Завершение сессии на сервере MAX и очистка локального токена.
-- **`sock.end()`**: Принудительное закрытие сокета.
+```typescript
+const sock = makeMaxSocket({ auth: state });
 
-### Управление чатами и группами (`sock.chats`)
+// Основные фасадные методы:
+await sock.sendMessage(chatId, { text: 'Привет!' });
+await sock.editMessage(chatId, msgId, 'Новый текст');
+await sock.deleteMessages(chatId, [msgId]);
+await sock.addReaction(chatId, msgId, '👍');
+await sock.markChatRead(chatId);
+const mediaBuffer = await sock.downloadMedia(msg);
 
-- **`sock.getChats(options?)`**: Получение списка активных диалогов и каналов пользователя.
-- **`sock.getChat(chatId)`**: Получение детальной информации о чате/канале.
-- **`sock.createChat({ title, userIds, description?, isChannel? })`**: Создание новой группы или канала.
-- **`sock.setChatInfo(chatId, { title?, description?, avatarToken? })`**: Обновление названия, описания или аватара чата.
-- **`sock.getChatMembers(chatId, options?)`**: Список участников группы с их ролями (`ADMIN`, `MEMBER`, `OWNER`).
-- **`sock.addChatMembers(chatId, userIds)`**: Добавление пользователей в группу.
-- **`sock.removeChatMember(chatId, userId)`**: Исключение (кик) пользователя из группы.
-- **`sock.leaveChat(chatId)`**: Выход из чата или канала.
-- **`sock.deleteChat(chatId)`**: Удаление чата.
-- **`sock.createInviteLink(chatId)`**: Создание ссылки-приглашения в группу.
-- **`sock.joinByLink(inviteLinkOrCode)`**: Вступление в группу по ссылке-приглашению.
-
-### Пользователи, контакты и профили (`sock.contacts`)
-
-- **`sock.getContactByPhone(phone)`**: Пробитие профиля пользователя MAX по номеру телефона.
-- **`sock.getUserProfile(userId)`**: Получение публичного профиля пользователя по ID.
-- **`sock.searchContacts(query)`**: Поиск пользователей в своей адресной книге.
-- **`sock.publicSearch(query)`**: Глобальный поиск пользователей и ботов в каталоге MAX по никнейму.
-- **`sock.addContact(phone, { firstName, lastName? })`**: Добавление номера в контакты.
-- **`sock.updateProfile({ firstName?, lastName?, bio?, avatarToken? })`**: Обновление данных своего профиля.
-
-### Индикаторы активности / Presence (`sock.presence`)
-
-- **`sock.sendPresence(chatId, action)`**: Отправка статуса активности (`'typing'`, `'recording_audio'`, `'uploading_file'`, `'paused'`).
-- **`sock.simulateTyping(chatId, delayMs?, action?)`**: Показ статуса активности в течение `delayMs` с автоматическим сбросом.
-
-### События (`sock.ev.on`)
-
-- `'connection.update'`: Изменение состояния сокета (`connecting`, `open`, `close`, `{ qr, trackId }`).
-- `'creds.update'`: Обновление токенов или информации об устройстве.
-- `'messages.upsert'`: Новые входящие сообщения (`{ messages: MaxMessage[], type: 'notify' }`).
-- `'messages.read'`: Уведомление о прочтении сообщений (`{ chatId, userId, messageIds, markTime }`).
-- `'presence.update'`: Изменение активности пользователя (`{ chatId, userId, action, isTyping }`).
-- `'sync.start'`: Старт восстановления истории после переподключения (`{ fromTimestamp }`).
-- `'sync.complete'`: Завершение синхронизации пропущенных сообщений (`{ syncedAt, count }`).
-
-### Низкоуровневая инфраструктура и отказоустойчивость
-
-- **`sock.queue` (`RequestQueue`)**:
-  - `enqueue(task, { priority, bucketKey, signal })`: Постановка задачи в очередь с контролем приоритета (`Priority.HIGH`, `Priority.NORMAL`, `Priority.LOW`) и отменой через `AbortSignal`.
-  - Автоматическая изоляция частоты сообщений по отдельным чатам (`maxChatPerSecond`) и глобально (`maxGlobalPerSecond`).
-  - Поддержка backpressure сокета: автоматическая приостановка отправки при заполнении TCP-буфера (`maxBufferedBytes`) до вызова события `'drain'`.
-  - `clear(error?)`: Сброс очереди с реджектом ожидающих промисов.
-- **`sock.circuitBreaker` (`CircuitBreaker`)**:
-  - Состояния: `CLOSED`, `HALF_OPEN`, `OPEN`.
-  - Экспоненциальное скользящее среднее (EWMA) задержки сокета RTT.
-  - Автоматический размыкатель цепи при всплеске сбоев (`failureThreshold`) или критическом лаге сети (`latencyThresholdMs`).
-- **`sock.ledger` (`IdempotencyLedger`)**:
-  - `generateCid()`: Генерация строго монотонных клиентских `cid` (`ts_counter_entropy`).
-  - Регистрация и подтверждение статуса исходящих сообщений (`register`, `markAcked`, `markFailed`).
-  - Кольцевое хранилище с TTL-ротацией для защиты от повторной отправки дубликатов при дропе пакетов.
-- **`sock.gapRecovery` (`GapRecoveryManager`)**:
-  - `trackServerTime(ts)` и `trackSeq(seq)`: Монотонная фиксация последнего серверного времени и sequence ID.
-  - `isDuplicate(msgId)`: Мгновенная проверка и дедупликация входящих сообщений.
-  - `performSync(fetcher, onMessage)`: Синхронизация пропущенных сообщений при реконнекте без дублей.
-- **Потоковая передача медиа (`sock.media.httpClient`)**:
-  - `uploadStream(url, stream, { signal, onProgress, ... })`: Потоковая выгрузка файлов любого размера без загрузки в память целиком.
-  - `downloadStream(url, { signal, onProgress, maxBytes, ... })`: Потоковое скачивание с редиректами и валидацией лимитов.
-
-### Утилиты для работы со звуком
-
-- **`extractAudioMetadata(buffer)`**: Извлечение реальной длительности (duration в секундах) и mime-типа из заголовков WAV (RIFF), OGG (Opus) и MP3.
-- **`generateWaveform(buffer, samplesCount = 64)`**: Расчёт массива амплитуд (0..255) для реалистичной визуальной дорожки голосовых сообщений.
+// Подмодули и менеджеры:
+sock.chats       // ChatManager: getChats, createChat, getChatMembers, inviteLinks
+sock.contacts    // ContactManager: getContactByPhone, getUserProfile, searchContacts
+sock.presence    // PresenceManager: sendPresence, simulateTyping
+sock.media       // MediaManager: uploadPhoto, uploadFile, uploadVideo, uploadAudio
+sock.ev          // MaxEventEmitter: messages.upsert, connection.update, creds.update
+sock.queue       // RequestQueue: Token Bucket rate limiter и socket backpressure
+sock.circuitBreaker // CircuitBreaker: L7 EWMA RTT замер и автоматический предохранитель
+sock.ledger      // IdempotencyLedger: монотонные cid и дедупликация исходящих
+sock.gapRecovery // GapRecoveryManager: синхронизация пропущенных сообщений при реконнекте
+```
 
 ---
 

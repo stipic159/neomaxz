@@ -6,7 +6,7 @@ import qrcode from 'qrcode-terminal';
 import { useSqliteAuthState } from './session/sqlite-auth.js';
 import { makeMaxSocket } from './client.js';
 
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.1';
 
 export interface CliOptions {
   command?: string;
