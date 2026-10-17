@@ -1,6 +1,6 @@
 {
   "name": "neomaxz",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Headless WebSocket/TCP client library for MAX messenger inspired by Baileys",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

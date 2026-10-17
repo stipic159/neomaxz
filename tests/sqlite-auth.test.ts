@@ -31,7 +31,8 @@ describe('useSqliteAuthState', () => {
     session1.state.creds.phone = '+79991234567';
     session1.state.creds.sessionToken = 'token_abc_123';
     session1.state.creds.userId = 'user_777';
-    session1.state.keys['custom_key'] = { foo: 'bar', count: 42 };
+    assert.ok(session1.state.keys);
+    session1.state.keys!['custom_key'] = { foo: 'bar', count: 42 };
 
     await session1.saveCreds();
     session1.close();
@@ -41,7 +42,8 @@ describe('useSqliteAuthState', () => {
     assert.equal(session2.state.creds.phone, '+79991234567');
     assert.equal(session2.state.creds.sessionToken, 'token_abc_123');
     assert.equal(session2.state.creds.userId, 'user_777');
-    assert.deepEqual(session2.state.keys['custom_key'], { foo: 'bar', count: 42 });
+    assert.ok(session2.state.keys);
+    assert.deepEqual(session2.state.keys!['custom_key'], { foo: 'bar', count: 42 });
 
     // 3. Update existing credentials
     session2.state.creds.sessionToken = 'token_xyz_999';

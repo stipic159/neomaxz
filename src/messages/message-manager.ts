@@ -10,10 +10,12 @@ import {
   type MessageElement,
 } from "../types/message.js";
 import type { MessageAttachment } from "../types/media.js";
+import { IdempotencyLedger } from "./idempotency-ledger.js";
 
 export class MessageManager {
   private cidCounter = 0n;
   private mediaManager: MediaManager;
+  public readonly ledger = new IdempotencyLedger();
 
   constructor(mediaManager?: MediaManager) {
     this.mediaManager = mediaManager ?? new MediaManager();
@@ -30,7 +32,7 @@ export class MessageManager {
 
   /**
    * Sends a message to a chat (0x0040 MSG_SEND).
-   * Supports plain text, markdown formatting, media attachments, buttons, polls, and scheduling.
+   * Supports plain text, Markdown formatting, media attachments, buttons, polls, and scheduling.
    */
   public async sendMessage(
     client: SocketClient,
@@ -151,31 +153,41 @@ export class MessageManager {
       payload.sendAt = sendAt;
     }
 
-    const res = await client.query({
-      opcode: OPCODES.MSG_SEND,
-      payload,
-    });
+    const cidStr = String(cid);
+    this.ledger.registerOutbound(cidStr, String(chatId));
 
-    const responseMsg = res.payload?.message ?? {};
-    const messageId = String(responseMsg.id ?? '');
+    try {
+      const res = await client.query({
+        opcode: OPCODES.MSG_SEND,
+        payload,
+        bucketKey: `chat:${chatId}`,
+      });
 
-    return normalizeMessage(
-      {
-        chatId: String(chatId),
-        id: messageId,
-        message: {
-          id: responseMsg.id,
-          text: textToSend ?? '',
-          elements: elementsToSend,
-          cid,
-          time: responseMsg.time ?? Date.now(),
-          attaches: responseMsg.attaches ?? attaches,
-          link,
+      const responseMsg = res.payload?.message ?? {};
+      const messageId = String(responseMsg.id ?? '');
+      this.ledger.markAcknowledged(cidStr, messageId);
+
+      return normalizeMessage(
+        {
+          chatId: String(chatId),
+          id: messageId,
+          message: {
+            id: responseMsg.id,
+            text: textToSend ?? '',
+            elements: elementsToSend,
+            cid,
+            time: responseMsg.time ?? Date.now(),
+            attaches: responseMsg.attaches ?? attaches,
+            link,
+          },
+          fromMe: true,
         },
-        fromMe: true,
-      },
-      currentUserId
-    );
+        currentUserId
+      );
+    } catch (err: any) {
+      this.ledger.markFailed(cidStr, err?.message ?? String(err));
+      throw err;
+    }
   }
 
   /**

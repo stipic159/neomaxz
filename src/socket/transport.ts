@@ -20,7 +20,9 @@ export interface ITransport {
   on(event: 'frame', listener: (frame: InboundFrame) => void): this;
   on(event: 'close', listener: (error?: Error) => void): this;
   on(event: 'error', listener: (error: Error) => void): this;
+  on(event: 'drain', listener: () => void): this;
   isOpen(): boolean;
+  readonly bufferedAmount?: number;
 }
 
 /**
@@ -34,6 +36,7 @@ export class WebSocketTransport implements ITransport {
     frame: new Set<(frame: InboundFrame) => void>(),
     close: new Set<(error?: Error) => void>(),
     error: new Set<(error: Error) => void>(),
+    drain: new Set<() => void>(),
   };
 
   constructor(options: TransportOptions = {}) {
@@ -47,10 +50,15 @@ export class WebSocketTransport implements ITransport {
     };
   }
 
+  public get bufferedAmount(): number {
+    return this.ws?.bufferedAmount ?? 0;
+  }
+
   public on(event: 'frame', listener: (frame: InboundFrame) => void): this;
   public on(event: 'close', listener: (error?: Error) => void): this;
   public on(event: 'error', listener: (error: Error) => void): this;
-  public on(event: 'frame' | 'close' | 'error', listener: any): this {
+  public on(event: 'drain', listener: () => void): this;
+  public on(event: 'frame' | 'close' | 'error' | 'drain', listener: any): this {
     this.listeners[event].add(listener);
     return this;
   }
@@ -73,6 +81,17 @@ export class WebSocketTransport implements ITransport {
 
       const onOpen = () => {
         cleanup();
+        const underlying = (ws as any)._socket;
+        if (underlying) {
+          try {
+            underlying.setKeepAlive?.(true, 5000);
+          } catch {}
+          underlying.on?.('drain', () => {
+            for (const listener of this.listeners.drain) {
+              try { listener(); } catch {}
+            }
+          });
+        }
         resolve();
       };
 
@@ -129,7 +148,7 @@ export class WebSocketTransport implements ITransport {
     });
   }
 
-  public close(error?: Error): void {
+  public close(_error?: Error): void {
     if (this.ws) {
       try {
         this.ws.terminate();
@@ -159,6 +178,7 @@ export class TlsSocketTransport implements ITransport {
     frame: new Set<(frame: InboundFrame) => void>(),
     close: new Set<(error?: Error) => void>(),
     error: new Set<(error: Error) => void>(),
+    drain: new Set<() => void>(),
   };
 
   constructor(options: TransportOptions = {}) {
@@ -172,10 +192,15 @@ export class TlsSocketTransport implements ITransport {
     };
   }
 
+  public get bufferedAmount(): number {
+    return this.socket?.writableLength ?? 0;
+  }
+
   public on(event: 'frame', listener: (frame: InboundFrame) => void): this;
   public on(event: 'close', listener: (error?: Error) => void): this;
   public on(event: 'error', listener: (error: Error) => void): this;
-  public on(event: 'frame' | 'close' | 'error', listener: any): this {
+  public on(event: 'drain', listener: () => void): this;
+  public on(event: 'frame' | 'close' | 'error' | 'drain', listener: any): this {
     this.listeners[event].add(listener);
     return this;
   }
@@ -199,6 +224,12 @@ export class TlsSocketTransport implements ITransport {
         },
         () => {
           this.socket = socket;
+          socket.setKeepAlive(true, 5000);
+          socket.on('drain', () => {
+            for (const listener of this.listeners.drain) {
+              listener();
+            }
+          });
           resolve();
         }
       );

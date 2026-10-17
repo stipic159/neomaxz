@@ -22,6 +22,8 @@ export interface MaxSocketConfig {
   keepAliveIntervalMs?: number;
   autoReconnect?: boolean;
   maxReconnectDelayMs?: number;
+  maxGlobalPerSecond?: number;
+  maxChatPerSecond?: number;
   userAgent?: typeof DEFAULT_USER_AGENT;
 }
 
@@ -41,11 +43,19 @@ export function makeMaxSocket(config: MaxSocketConfig) {
     keepAliveIntervalMs: config.keepAliveIntervalMs,
     autoReconnect: config.autoReconnect,
     maxReconnectDelayMs: config.maxReconnectDelayMs,
+    maxGlobalPerSecond: config.maxGlobalPerSecond,
+    maxChatPerSecond: config.maxChatPerSecond,
     messageNormalizer: (payload) => normalizeMessage(payload, config.auth.creds.userId),
     onSessionHandshake: async (client) => {
       await authManager.initSession(client, config.userAgent);
       if (config.auth.creds.sessionToken) {
         lastLoginResult = await authManager.loginWithToken(client);
+      }
+    },
+    onReconnectSync: async () => {
+      if (socketClient.gapRecovery.getLastServerTime() > 0) {
+        socketClient.ev.emit('sync.start', { fromTimestamp: socketClient.gapRecovery.getLastServerTime() });
+        socketClient.ev.emit('sync.complete', { syncedAt: Date.now() });
       }
     },
   });
@@ -56,11 +66,23 @@ export function makeMaxSocket(config: MaxSocketConfig) {
   });
 
   const sock = {
-    /** Event bus: connection.update, messages.upsert, messages.read, presence.update, creds.update */
+    /** Event bus: connection.update, messages.upsert, messages.read, presence.update, creds.update, sync.start, sync.complete */
     ev: socketClient.ev,
 
     /** Current authentication state */
     authState: config.auth,
+
+    /** Outbound request queue & rate limiter */
+    queue: socketClient.queue,
+
+    /** L7 RTT Circuit Breaker */
+    circuitBreaker: socketClient.circuitBreaker,
+
+    /** Gap recovery and message sync manager */
+    gapRecovery: socketClient.gapRecovery,
+
+    /** Outbound idempotency ledger */
+    ledger: messageManager.ledger,
 
     /** Current user info after login */
     get user() {
@@ -396,7 +418,7 @@ export function makeMaxSocket(config: MaxSocketConfig) {
     },
 
     /**
-     * Generates or fetches an invite link for a chat (0x003e CHAT_INVITE_LINK).
+     * Generates or fetches an invitation link for a chat (0x003e CHAT_INVITE_LINK).
      */
     async createInviteLink(
       chatId: string | number | bigint
@@ -405,7 +427,7 @@ export function makeMaxSocket(config: MaxSocketConfig) {
     },
 
     /**
-     * Joins a chat using an invite link or invite token (0x003f CHAT_JOIN_LINK).
+     * Joins a chat using an invitation link or invite token (0x003f CHAT_JOIN_LINK).
      */
     async joinByLink(
       inviteLinkOrCode: string
@@ -483,7 +505,7 @@ export function makeMaxSocket(config: MaxSocketConfig) {
     },
 
     /**
-     * Simulates typing for delayMs, then resets status to paused.
+     * Simulates typing for delayMs, then resets status to pause.
      */
     async simulateTyping(
       chatId: string | number | bigint,

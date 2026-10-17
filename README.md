@@ -25,6 +25,11 @@
 - 🎙️ **Нативная волна звука (Waveform) и длительность**: Автоматический расчёт длительности и генерация амплитудной визуализации (волнограммы из 64 полос) для голосовых сообщений (PTT), как в официальных клиентах MAX и Telegram.
 - ⚡ **Строгая упорядоченность событий**: Внутренняя FIFO-очередь в `sock.ev` предотвращает состояние гонки (race conditions) при асинхронных обработчиках сообщений.
 - 🔁 **Автоматический Heartbeat & Reconnect**: Отправка фоновых PING каждые 25 секунд и экспоненциальный backoff при потере соединения.
+- 🚦 **Очередь запросов и Rate Limiter (Token Bucket)**: Контроль исходящих запросов с приоритетами (`HIGH`, `NORMAL`, `LOW`), изоляцией спама по чатам (`maxChatPerSecond`), лимитом параллелизма (`maxConcurrent`) и защитой от переполнения сокета (Backpressure drain).
+- 🛡️ **Гарантия идемпотентности (Idempotency Ledger)**: Генерация уникальных монотонных `cid`, трекинг статуса в полете и предотвращение дублей сообщений при сбоях сети.
+- 🔄 **Движок восстановления пробелов (Gap Recovery)**: Монотонный учет server timestamp/sequence, фильтрация дубликатов входящих событий и синхронизация пропущенных сообщений при реконнекте.
+- ⚡ **Circuit Breaker и L4/L7 Heartbeat**: Мгновенное обнаружение полуоткрытых сокетов через TCP Keep-Alive (`5s`), скользящий замер RTT (EWMA) и предохранитель от каскадных сбоев.
+- 🌊 **Потоковый пайплайн медиа (Zero-RAM Spikes)**: Методы `uploadStream` и `downloadStream` на базе нативных стримов `node:stream` с прогресс-колбэками, `AbortSignal` и постоянными TLS-агентами (Keep-Alive).
 
 ---
 
@@ -238,6 +243,31 @@ main().catch(console.error);
 - `'messages.upsert'`: Новые входящие сообщения (`{ messages: MaxMessage[], type: 'notify' }`).
 - `'messages.read'`: Уведомление о прочтении сообщений (`{ chatId, userId, messageIds, markTime }`).
 - `'presence.update'`: Изменение активности пользователя (`{ chatId, userId, action, isTyping }`).
+- `'sync.start'`: Старт восстановления истории после переподключения (`{ fromTimestamp }`).
+- `'sync.complete'`: Завершение синхронизации пропущенных сообщений (`{ syncedAt, count }`).
+
+### Низкоуровневая инфраструктура и отказоустойчивость
+
+- **`sock.queue` (`RequestQueue`)**:
+  - `enqueue(task, { priority, bucketKey, signal })`: Постановка задачи в очередь с контролем приоритета (`Priority.HIGH`, `Priority.NORMAL`, `Priority.LOW`) и отменой через `AbortSignal`.
+  - Автоматическая изоляция частоты сообщений по отдельным чатам (`maxChatPerSecond`) и глобально (`maxGlobalPerSecond`).
+  - Поддержка backpressure сокета: автоматическая приостановка отправки при заполнении TCP-буфера (`maxBufferedBytes`) до вызова события `'drain'`.
+  - `clear(error?)`: Сброс очереди с реджектом ожидающих промисов.
+- **`sock.circuitBreaker` (`CircuitBreaker`)**:
+  - Состояния: `CLOSED`, `HALF_OPEN`, `OPEN`.
+  - Экспоненциальное скользящее среднее (EWMA) задержки сокета RTT.
+  - Автоматический размыкатель цепи при всплеске сбоев (`failureThreshold`) или критическом лаге сети (`latencyThresholdMs`).
+- **`sock.ledger` (`IdempotencyLedger`)**:
+  - `generateCid()`: Генерация строго монотонных клиентских `cid` (`ts_counter_entropy`).
+  - Регистрация и подтверждение статуса исходящих сообщений (`register`, `markAcked`, `markFailed`).
+  - Кольцевое хранилище с TTL-ротацией для защиты от повторной отправки дубликатов при дропе пакетов.
+- **`sock.gapRecovery` (`GapRecoveryManager`)**:
+  - `trackServerTime(ts)` и `trackSeq(seq)`: Монотонная фиксация последнего серверного времени и sequence ID.
+  - `isDuplicate(msgId)`: Мгновенная проверка и дедупликация входящих сообщений.
+  - `performSync(fetcher, onMessage)`: Синхронизация пропущенных сообщений при реконнекте без дублей.
+- **Потоковая передача медиа (`sock.media.httpClient`)**:
+  - `uploadStream(url, stream, { signal, onProgress, ... })`: Потоковая выгрузка файлов любого размера без загрузки в память целиком.
+  - `downloadStream(url, { signal, onProgress, maxBytes, ... })`: Потоковое скачивание с редиректами и валидацией лимитов.
 
 ### Утилиты для работы со звуком
 

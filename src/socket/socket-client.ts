@@ -3,7 +3,10 @@ import type { InboundFrame, OutboundFrame } from "../protocol/frame.js";
 import { RequestBroker } from "./request-broker.js";
 import { MaxEventEmitter } from "./event-emitter.js";
 import { WebSocketTransport, type ITransport, type TransportOptions } from "./transport.js";
-import { DisconnectReason, type ConnectionStatus } from "../types/connection.js";
+import { DisconnectReason, type ConnectionStatus, type DisconnectInfo } from "../types/connection.js";
+import { RequestQueue, Priority } from "./request-queue.js";
+import { CircuitBreaker } from "./circuit-breaker.js";
+import { GapRecoveryManager } from "./gap-recovery.js";
 
 export interface SocketClientOptions {
   transport?: ITransport;
@@ -12,12 +15,19 @@ export interface SocketClientOptions {
   keepAliveIntervalMs?: number;
   autoReconnect?: boolean;
   maxReconnectDelayMs?: number;
+  maxGlobalPerSecond?: number;
+  maxChatPerSecond?: number;
   messageNormalizer?: (payload: Record<string, any>) => any;
   onSessionHandshake?: (client: SocketClient) => Promise<void>;
+  onReconnectSync?: (client: SocketClient) => Promise<void>;
 }
 
 export class SocketClient {
   public readonly ev = new MaxEventEmitter();
+  public readonly queue: RequestQueue;
+  public readonly circuitBreaker: CircuitBreaker;
+  public readonly gapRecovery = new GapRecoveryManager();
+
   private readonly broker = new RequestBroker();
   private transport: ITransport;
   private readonly timeoutMs: number;
@@ -26,6 +36,7 @@ export class SocketClient {
   private readonly maxReconnectDelayMs: number;
   private messageNormalizer?: (payload: Record<string, any>) => any;
   private onSessionHandshake?: (client: SocketClient) => Promise<void>;
+  private onReconnectSync?: (client: SocketClient) => Promise<void>;
 
   private status: ConnectionStatus = 'close';
   private pingTimer: NodeJS.Timeout | null = null;
@@ -40,13 +51,40 @@ export class SocketClient {
     this.maxReconnectDelayMs = options.maxReconnectDelayMs ?? 60000;
     this.messageNormalizer = options.messageNormalizer;
     this.onSessionHandshake = options.onSessionHandshake;
+    this.onReconnectSync = options.onReconnectSync;
 
     this.transport = options.transport ?? new WebSocketTransport(options.transportOptions);
+
+    const supportsBackpressure = typeof this.transport.bufferedAmount === 'number';
+
+    this.queue = new RequestQueue({
+      maxGlobalPerSecond: options.maxGlobalPerSecond ?? 30,
+      maxChatPerSecond: options.maxChatPerSecond ?? 5,
+      getBufferedAmount: supportsBackpressure ? () => this.transport.bufferedAmount ?? 0 : undefined,
+      onDrain: supportsBackpressure
+        ? (cb) => {
+            try {
+              this.transport.on('drain', cb);
+            } catch {}
+          }
+        : undefined,
+    });
+
+    this.circuitBreaker = new CircuitBreaker({
+      onTrip: (err) => {
+        this.transport.close(err);
+      },
+    });
+
     this.setupTransportListeners();
   }
 
   public setSessionHandshake(handler?: (client: SocketClient) => Promise<void>): void {
     this.onSessionHandshake = handler;
+  }
+
+  public setReconnectSync(handler?: (client: SocketClient) => Promise<void>): void {
+    this.onReconnectSync = handler;
   }
 
   public setMessageNormalizer(normalizer?: (payload: Record<string, any>) => any): void {
@@ -64,6 +102,10 @@ export class SocketClient {
   private setupTransportListeners(): void {
     this.transport.on('frame', (frame: InboundFrame) => {
       this.ev.emit('frame.inbound', frame);
+
+      // Track last seen server time & sequence for gap recovery
+      const frameTime = frame.payload?.time ?? frame.payload?.timestamp;
+      this.gapRecovery.updateLastSeen(typeof frameTime === 'number' ? frameTime : undefined, frame.seq);
 
       // 1. If it's a response to one of our requests, resolve it
       if (frame.cmd === Command.RESPONSE || frame.cmd === Command.ERROR) {
@@ -98,12 +140,24 @@ export class SocketClient {
 
     try {
       await this.transport.connect();
+
       // If a session handshake handler is configured (e.g. INIT + LOGIN), run it before declaring connection 'open'
       if (this.onSessionHandshake) {
         await this.onSessionHandshake(this);
       }
+
+      // If this was a reconnection and a gap sync handler is configured, run sync
+      if (this.reconnectAttempts > 0 && this.onReconnectSync) {
+        try {
+          await this.onReconnectSync(this);
+        } catch (syncErr) {
+          this.ev.emit('error', syncErr instanceof Error ? syncErr : new Error(String(syncErr)));
+        }
+      }
+
       this.setStatus('open');
       this.reconnectAttempts = 0;
+      this.circuitBreaker.reset();
       this.startHeartbeat();
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -113,40 +167,58 @@ export class SocketClient {
   }
 
   /**
-   * Sends a request frame and awaits the matched response frame by seq.
+   * Sends a request frame through the rate-limited queue and awaits the matched response frame by seq.
    */
   public async query(options: {
     opcode: number;
     payload?: Record<string, any> | null;
     cmd?: Command | number;
     timeoutMs?: number;
+    priority?: Priority;
+    bucketKey?: string;
+    signal?: AbortSignal;
   }): Promise<InboundFrame> {
     if (!this.transport.isOpen() || (this.status !== 'open' && this.status !== 'connecting')) {
       throw new Error('Cannot query: connection is not open');
     }
 
-    const seq = this.broker.nextSeq();
-    const frame: OutboundFrame = {
-      seq,
-      opcode: options.opcode,
-      cmd: options.cmd ?? Command.REQUEST,
-      payload: options.payload,
-    };
+    const priority = options.priority ?? (options.opcode === OPCODES.PING ? Priority.HIGH : Priority.NORMAL);
 
-    this.ev.emit('frame.outbound', frame);
-    const promise = this.broker.register(seq, options.opcode, options.timeoutMs ?? this.timeoutMs);
+    return this.queue.enqueue(
+      async () => {
+        if (!this.transport.isOpen() || (this.status !== 'open' && this.status !== 'connecting')) {
+          throw new Error('Cannot query: connection is not open');
+        }
 
-    try {
-      await this.transport.send(frame);
-    } catch (err) {
-      // Rejection is isolated to this specific request only — do NOT rejectAll!
-      const error = err instanceof Error ? err : new Error(String(err));
-      this.broker.reject(seq, error);
-      promise.catch(() => {});
-      throw error;
-    }
+        const seq = this.broker.nextSeq();
+        const frame: OutboundFrame = {
+          seq,
+          opcode: options.opcode,
+          cmd: options.cmd ?? Command.REQUEST,
+          payload: options.payload,
+        };
 
-    return promise;
+        this.ev.emit('frame.outbound', frame);
+        const promise = this.broker.register(seq, options.opcode, options.timeoutMs ?? this.timeoutMs);
+
+        try {
+          await this.transport.send(frame);
+        } catch (err) {
+          // Rejection is isolated to this specific request only — do NOT rejectAll!
+          const error = err instanceof Error ? err : new Error(String(err));
+          this.broker.reject(seq, error);
+          promise.catch(() => {});
+          throw error;
+        }
+
+        return promise;
+      },
+      {
+        priority,
+        bucketKey: options.bucketKey,
+        signal: options.signal,
+      }
+    );
   }
 
   /**
@@ -155,7 +227,9 @@ export class SocketClient {
   public disconnect(): void {
     this.closedByUser = true;
     this.clearTimers();
+    this.queue.clear(new Error('Connection closed by user'));
     this.broker.rejectAll(new Error('Connection closed by user'));
+    this.circuitBreaker.reset();
     this.transport.close();
     this.setStatus('close', { reason: DisconnectReason.connectionClosed, date: new Date() });
   }
@@ -165,7 +239,9 @@ export class SocketClient {
     const wasOpen = this.status === 'open';
     const reason = error ? DisconnectReason.connectionLost : DisconnectReason.connectionClosed;
 
+    this.queue.clear(error ?? new Error('Connection closed'));
     this.broker.rejectAll(error ?? new Error('Connection closed'));
+    this.circuitBreaker.reset();
     this.setStatus('close', { error, reason, date: new Date() });
 
     if (!this.closedByUser && this.autoReconnect) {
@@ -201,14 +277,17 @@ export class SocketClient {
     this.pingTimer = setInterval(async () => {
       if (!this.isOpen()) return;
 
+      const startTime = Date.now();
       try {
         await this.query({
           opcode: OPCODES.PING,
-          timeoutMs: 10000,
+          timeoutMs: 5000,
+          priority: Priority.HIGH,
         });
+        const rtt = Date.now() - startTime;
+        this.circuitBreaker.recordSuccess(rtt);
       } catch (err) {
-        // Ping failed or timed out — connection is stale
-        this.transport.close(new Error('Keep-alive ping timed out'));
+        this.circuitBreaker.recordFailure(err instanceof Error ? err : new Error(String(err)));
       }
     }, this.keepAliveIntervalMs);
     this.pingTimer.unref?.();
@@ -229,12 +308,19 @@ export class SocketClient {
     }
   }
 
-  private setStatus(status: ConnectionStatus, disconnectInfo?: any): void {
-    if (this.status === status && !disconnectInfo) return;
+  private setStatus(status: ConnectionStatus, disconnectPayload?: { error?: Error; reason?: DisconnectReason; date?: Date }): void {
     this.status = status;
+    const lastDisconnect: DisconnectInfo | undefined = disconnectPayload
+      ? {
+          error: disconnectPayload.error,
+          reason: disconnectPayload.reason,
+          date: disconnectPayload.date ?? new Date(),
+        }
+      : undefined;
+
     this.ev.emit('connection.update', {
       connection: status,
-      ...(disconnectInfo ? { lastDisconnect: disconnectInfo } : {}),
+      lastDisconnect,
     });
   }
 
@@ -247,6 +333,18 @@ export class SocketClient {
         const message = this.messageNormalizer
           ? this.messageNormalizer(payload)
           : (payload.message ?? payload);
+
+        // Deduplication check
+        if (message.id && this.gapRecovery.isDuplicate(String(message.id))) {
+          break;
+        }
+        if (message.id) {
+          this.gapRecovery.recordMessageId(String(message.id));
+        }
+
+        const msgTime = message.timestamp ?? payload.time ?? Date.now();
+        this.gapRecovery.updateLastSeen(msgTime, frame.seq);
+
         this.ev.emit('messages.upsert', {
           messages: [message],
           type: 'notify',

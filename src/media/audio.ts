@@ -100,7 +100,7 @@ export function extractAudioMetadata(buffer: Buffer): AudioMetadata {
 
 /**
  * Generates an array of visual amplitude levels (waveform) from 0 to 255.
- * Typically 64 or 100 samples are expected by messaging apps like MAX and Telegram.
+ * Typically, 64 or 100 samples are expected by messaging apps like MAX and Telegram.
  */
 export function generateWaveform(buffer: Buffer, samplesCount = 64): number[] {
   if (!buffer || buffer.length === 0) {
@@ -127,11 +127,10 @@ export function generateWaveform(buffer: Buffer, samplesCount = 64): number[] {
 
     const avg = count > 0 ? sum / count : 0;
     // Scale and clamp to [0, 255]
-    const normalized = Math.min(255, Math.max(0, Math.round((avg / 128) * 255)));
-    result[i] = normalized;
+    result[i] = Math.min(255, Math.max(0, Math.round((avg / 128) * 255)));
   }
 
-  // Ensure minimum visual variation so it never looks like a flat dead line
+  // Ensure minimum visual variation so it never looks like a flat deadline
   const maxVal = Math.max(...result);
   if (maxVal > 0) {
     for (let i = 0; i < samplesCount; i++) {

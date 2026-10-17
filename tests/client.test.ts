@@ -250,7 +250,9 @@ describe('Stage 4 & 5: makeMaxSocket & High-Level API Tests', () => {
 
     const statusHistory: string[] = [];
     sock.ev.on('connection.update', (update) => {
-      statusHistory.push(update.connection);
+      if (update.connection) {
+        statusHistory.push(update.connection);
+      }
     });
 
     // 1. Initial connect: runs INIT (1) and LOGIN (1)

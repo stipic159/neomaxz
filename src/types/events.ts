@@ -29,6 +29,8 @@ export interface MaxEvents {
   'messages.update': any[];
   'messages.read': ReadReceipt;
   'attachment.ready': AttachmentReadyEvent;
+  'sync.start': { fromTimestamp: number };
+  'sync.complete': { syncedAt: number; count?: number };
   'error': Error;
 }
 

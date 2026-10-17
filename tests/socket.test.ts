@@ -18,9 +18,9 @@ describe('Stage 2: Socket Core & Event Emitter Tests', () => {
       order.push(Number(data.chatId));
     });
 
-    ev.emit('presence.update', { chatId: '1', userId: 'u1', isTyping: true });
-    ev.emit('presence.update', { chatId: '2', userId: 'u2', isTyping: false });
-    ev.emit('presence.update', { chatId: '3', userId: 'u3', isTyping: true });
+    ev.emit('presence.update', { chatId: '1', userId: 'u1', action: 'typing', isTyping: true });
+    ev.emit('presence.update', { chatId: '2', userId: 'u2', action: 'paused', isTyping: false });
+    ev.emit('presence.update', { chatId: '3', userId: 'u3', action: 'typing', isTyping: true });
 
     // Wait for queue to drain
     await new Promise((r) => setTimeout(r, 100));
@@ -338,7 +338,7 @@ describe('Stage 2: Socket Core & Event Emitter Tests', () => {
       finished.push('fast');
     });
 
-    ev.emit('presence.update', { chatId: '1', userId: 'u1', isTyping: true });
+    ev.emit('presence.update', { chatId: '1', userId: 'u1', action: 'typing', isTyping: true });
 
     await new Promise((r) => setTimeout(r, 70));
     assert.deepStrictEqual(finished, ['fast', 'slow'], 'Fast listener should complete before slow listener');

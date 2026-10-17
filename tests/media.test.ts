@@ -53,6 +53,38 @@ describe('Media Pipeline & Attachment Tests', () => {
         return;
       }
 
+      if (req.url === '/redirect-relative' && req.method === 'GET') {
+        res.writeHead(302, { 'Location': '/download/test.bin' });
+        res.end();
+        return;
+      }
+
+      if (req.url === '/redirect-loop' && req.method === 'GET') {
+        res.writeHead(302, { 'Location': '/redirect-loop' });
+        res.end();
+        return;
+      }
+
+      if (req.url === '/content-length-huge' && req.method === 'GET') {
+        res.writeHead(200, {
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': '1000000000',
+        });
+        res.write('small-chunk');
+        return;
+      }
+
+      if (req.url === '/slow-endpoint') {
+        // Deliberately delay response to trigger timeout
+        setTimeout(() => {
+          try {
+            res.writeHead(200);
+            res.end('late');
+          } catch {}
+        }, 500);
+        return;
+      }
+
       res.writeHead(404);
       res.end('Not Found');
     });
@@ -79,12 +111,14 @@ describe('Media Pipeline & Attachment Tests', () => {
       });
 
       assert.deepStrictEqual(res, { token: 'photo_tok_xyz', id: 777 });
+      client.destroy();
     });
 
     test('downloads data as Buffer', async () => {
       const client = new HttpClient();
       const buf = await client.download(`${serverBaseUrl}/download/test.bin`);
       assert.strictEqual(buf.toString('utf-8'), 'HELLO_MEDIA_CONTENT');
+      client.destroy();
     });
 
     test('fails gracefully on HTTP 500 status', async () => {
@@ -95,6 +129,77 @@ describe('Media Pipeline & Attachment Tests', () => {
         },
         /HTTP upload failed with status 500/
       );
+      client.destroy();
+    });
+
+    test('rejects upload on timeout without hanging', async () => {
+      const client = new HttpClient();
+      await assert.rejects(
+        async () => {
+          await client.upload(`${serverBaseUrl}/slow-endpoint`, Buffer.from('data'), { timeoutMs: 50 });
+        },
+        /timed out after 50ms/
+      );
+      client.destroy();
+    });
+
+    test('rejects download on timeout without hanging', async () => {
+      const client = new HttpClient();
+      await assert.rejects(
+        async () => {
+          await client.download(`${serverBaseUrl}/slow-endpoint`, { timeoutMs: 50 });
+        },
+        /timed out after 50ms/
+      );
+      client.destroy();
+    });
+
+    test('follows relative redirect in download', async () => {
+      const client = new HttpClient();
+      const buf = await client.download(`${serverBaseUrl}/redirect-relative`);
+      assert.strictEqual(buf.toString('utf-8'), 'HELLO_MEDIA_CONTENT');
+      client.destroy();
+    });
+
+    test('rejects on redirect loop exceeding maxRedirects', async () => {
+      const client = new HttpClient();
+      await assert.rejects(
+        async () => {
+          await client.download(`${serverBaseUrl}/redirect-loop`, { maxRedirects: 3 });
+        },
+        /exceeded maximum redirect depth of 3/
+      );
+      client.destroy();
+    });
+
+    test('rejects early on Content-Length header exceeding maxBytes', async () => {
+      const client = new HttpClient();
+      await assert.rejects(
+        async () => {
+          await client.download(`${serverBaseUrl}/content-length-huge`, { maxBytes: 500 });
+        },
+        /Download exceeded maximum allowed size of 500 bytes \(Content-Length: 1000000000\)/
+      );
+      client.destroy();
+    });
+
+    test('rejects null or undefined source in resolveMediaSource', async () => {
+      const client = new HttpClient();
+      await assert.rejects(
+        async () => {
+          await client.resolveMediaSource(null as any);
+        },
+        /Invalid MediaSource: value is null or undefined/
+      );
+      client.destroy();
+    });
+
+    test('resolves MediaSource from direct string URL', async () => {
+      const client = new HttpClient();
+      const resolved = await client.resolveMediaSource(`${serverBaseUrl}/download/test.bin`);
+      assert.strictEqual(resolved.buffer.toString('utf-8'), 'HELLO_MEDIA_CONTENT');
+      assert.strictEqual(resolved.fileName, 'test.bin');
+      client.destroy();
     });
 
     test('rejects download when size exceeds maxBytes limit', async () => {
@@ -105,6 +210,7 @@ describe('Media Pipeline & Attachment Tests', () => {
         },
         /Download exceeded maximum allowed size/
       );
+      client.destroy();
     });
 
     test('resolves MediaSource from URL correctly', async () => {
@@ -112,6 +218,7 @@ describe('Media Pipeline & Attachment Tests', () => {
       const resolved = await client.resolveMediaSource({ url: `${serverBaseUrl}/download/test.bin` });
       assert.strictEqual(resolved.buffer.toString('utf-8'), 'HELLO_MEDIA_CONTENT');
       assert.strictEqual(resolved.fileName, 'test.bin');
+      client.destroy();
     });
   });
 

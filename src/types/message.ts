@@ -71,7 +71,7 @@ export interface MaxMessage {
   fromMe: boolean;
   senderId?: string;
   senderName?: string;
-  text: string;
+    text: string;
   elements?: MessageElement[];
   timestamp: number;
   replyToMessageId?: string;

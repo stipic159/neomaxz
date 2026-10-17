@@ -14,9 +14,10 @@ export interface SqliteAuthStateResult {
 }
 
 /**
- * Single-file SQLite session storage using Node.js native `node:sqlite`.
+ * Single-file SQLite session storage using Node.js native `node:sqlite` .
  * Saves authentication credentials and keys atomically into a single `session.db` file.
  */
+// noinspection SqlNoDataSourceInspection,SqlResolve
 export async function useSqliteAuthState(dbPath = 'session.db'): Promise<SqliteAuthStateResult> {
   // Ensure target folder exists if path contains subdirectories
   const dir = path.dirname(dbPath);

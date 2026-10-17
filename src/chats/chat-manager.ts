@@ -203,7 +203,7 @@ export class ChatManager {
   }
 
   /**
-   * Generates or fetches an invite link for a chat (0x003e CHAT_INVITE_LINK).
+   * Generates or fetches an invitation link for a chat (0x003e CHAT_INVITE_LINK).
    */
   public async createInviteLink(
     client: SocketClient,
@@ -225,7 +225,7 @@ export class ChatManager {
   }
 
   /**
-   * Joins a chat using an invite link or invite token (0x003f CHAT_JOIN_LINK).
+   * Joins a chat using an invitation link or invite token (0x003f CHAT_JOIN_LINK).
    */
   public async joinByLink(
     client: SocketClient,
